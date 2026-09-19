@@ -1,26 +1,33 @@
 <template>
   <div class="annotation-layer">
     <button
-      v-for="annotation in annotations"
-      :key="annotation.id"
+      v-for="pin in pins"
+      :key="pin.annotation.id"
       type="button"
       class="annotation-pin"
-      :class="annotation.iconType"
-      :style="pinStyle(annotation)"
-      @click="$emit('select', annotation.id)"
+      :class="[pin.annotation.iconType, { active: pin.active, hidden: pin.hidden }]"
+      :style="{ left: `${pin.x}px`, top: `${pin.y}px` }"
+      :title="pin.annotation.title"
+      @click="$emit('select', pin.annotation.id)"
     >
-      <span>{{ iconMap[annotation.iconType] }}</span>
-      <strong>{{ annotation.title }}</strong>
+      <span>{{ iconMap[pin.annotation.iconType] }}</span>
+      <strong>{{ pin.annotation.title }}</strong>
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { Annotation } from '@/types';
+import type { AnnotationPinState } from '@/utils/annotation-anchor';
 
-defineProps<{
-  annotations: Annotation[];
-}>();
+withDefaults(
+  defineProps<{
+    pins: AnnotationPinState[];
+  }>(),
+  {
+    pins: () => []
+  }
+);
 
 defineEmits<{
   select: [id: string];
@@ -32,13 +39,6 @@ const iconMap = {
   history: '史',
   technique: '工'
 };
-
-function pinStyle(annotation: Annotation) {
-  return {
-    left: `${50 + annotation.position.x * 28}%`,
-    top: `${50 - annotation.position.y * 30}%`
-  };
-}
 </script>
 
 <style scoped>
@@ -63,6 +63,9 @@ function pinStyle(annotation: Annotation) {
   cursor: pointer;
   pointer-events: auto;
   transform: translate(-50%, -50%);
+  transition:
+    opacity 180ms ease,
+    scale 180ms ease;
 }
 
 .annotation-pin span {
@@ -94,5 +97,16 @@ function pinStyle(annotation: Annotation) {
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.annotation-pin.active {
+  border-color: #bb4d3e;
+  box-shadow: 0 0 0 2px rgba(187, 77, 62, 0.35), 0 14px 28px rgba(31, 46, 41, 0.18);
+}
+
+.annotation-pin.hidden {
+  opacity: 0;
+  scale: 0.6;
+  pointer-events: none;
 }
 </style>

@@ -1,7 +1,13 @@
 import { defineStore } from 'pinia';
 import { annotationRepository } from '@/api/storage';
-import type { Annotation, AnnotationDraft } from '@/types';
+import type { Annotation, AnnotationDraft, Vector3Tuple } from '@/types';
 import { createId } from '@/utils/storage';
+
+export interface AnchorUpgradePayload {
+  id: string;
+  position: Vector3Tuple;
+  normal: Vector3Tuple;
+}
 
 const seedAnnotations: Annotation[] = [
   {
@@ -74,6 +80,27 @@ export const useAnnotationStore = defineStore('annotation', {
       const updated: Annotation = { ...current, ...patch, updatedAt: new Date().toISOString() };
       this.annotations = this.annotations.map((annotation) => (annotation.id === id ? updated : annotation));
       await annotationRepository.save(updated);
+    },
+    /** 旧版悬浮标注升级为表面标注后批量回写 */
+    async upgradeAnchors(upgrades: AnchorUpgradePayload[]) {
+      if (upgrades.length === 0) return;
+      const now = new Date().toISOString();
+      const upgradedMap = new Map(upgrades.map((upgrade) => [upgrade.id, upgrade]));
+      const updatedList = this.annotations.map((annotation) => {
+        const upgrade = upgradedMap.get(annotation.id);
+        if (!upgrade || annotation.anchorMode === 'surface') return annotation;
+        return {
+          ...annotation,
+          position: { ...upgrade.position },
+          normal: { ...upgrade.normal },
+          anchorMode: 'surface' as const,
+          updatedAt: now
+        };
+      });
+      const changed = updatedList.filter((annotation, index) => annotation !== this.annotations[index]);
+      if (changed.length === 0) return;
+      this.annotations = updatedList;
+      await Promise.all(changed.map((annotation) => annotationRepository.save(annotation)));
     },
     async deleteAnnotation(id: string) {
       this.annotations = this.annotations.filter((annotation) => annotation.id !== id);
