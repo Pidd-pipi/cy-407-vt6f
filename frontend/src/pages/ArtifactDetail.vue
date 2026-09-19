@@ -9,14 +9,29 @@
     </div>
 
     <div class="detail-grid">
-      <ModelViewer :artifact="artifact" :annotations="annotations" @annotation-select="selectedAnnotationId = $event" />
+      <ModelViewer
+        ref="viewerRef"
+        :artifact="artifact"
+        :annotations="annotations"
+        :picking="pickMode"
+        @annotation-select="selectedAnnotationId = $event"
+        @surface-pick="onSurfacePick"
+      />
       <div class="detail-side">
-        <InfoPanel :artifact="artifact" :annotations="annotations" @annotation-click="selectedAnnotationId = $event" />
+        <InfoPanel
+          :artifact="artifact"
+          :annotations="annotations"
+          @annotation-click="focusAnnotation"
+        />
         <section class="panel-surface annotation-editor">
           <header>
             <h3>添加 3D 标注</h3>
             <small>坐标以模型中心为原点</small>
           </header>
+          <n-button :type="pickMode ? 'error' : 'primary'" secondary :ghost="pickMode" @click="togglePickMode">
+            {{ pickMode ? '退出点选' : '在模型表面点选位置' }}
+          </n-button>
+          <p v-if="pickMode" class="pick-tip">已进入点选模式：点击模型表面即可取点，拖拽仍可旋转视角。</p>
           <div class="axis-grid">
             <n-input-number v-model:value="draft.position.x" size="small" :step="0.1" placeholder="X" />
             <n-input-number v-model:value="draft.position.y" size="small" :step="0.1" placeholder="Y" />
@@ -49,13 +64,15 @@ import InfoPanel from '@/components/common/InfoPanel.vue';
 import ModelViewer from '@/components/viewer/ModelViewer.vue';
 import { useAnnotationStore } from '@/stores/annotation';
 import { useArtifactStore } from '@/stores/artifact';
-import type { AnnotationDraft, AnnotationIcon } from '@/types';
+import type { AnnotationDraft, AnnotationIcon, Vector3Tuple } from '@/types';
 
 const route = useRoute();
 const message = useMessage();
 const artifactStore = useArtifactStore();
 const annotationStore = useAnnotationStore();
 const selectedAnnotationId = ref('');
+const pickMode = ref(false);
+const viewerRef = ref<InstanceType<typeof ModelViewer> | null>(null);
 
 const artifact = computed(() => artifactStore.getById(String(route.params.id ?? '')));
 const annotations = computed(() => (artifact.value ? annotationStore.byArtifactId(artifact.value.id) : []));
@@ -76,6 +93,21 @@ const iconOptions: { label: string; value: AnnotationIcon }[] = [
   { label: '工艺', value: 'technique' }
 ];
 
+function togglePickMode() {
+  pickMode.value = !pickMode.value;
+}
+
+function onSurfacePick(payload: { position: Vector3Tuple; normal: Vector3Tuple }) {
+  draft.position = { ...payload.position };
+  draft.normal = { ...payload.normal };
+  message.success(`已取到表面位置 (${payload.position.x}, ${payload.position.y}, ${payload.position.z})`);
+}
+
+function focusAnnotation(id: string) {
+  selectedAnnotationId.value = id;
+  viewerRef.value?.focusAnnotation(id);
+}
+
 async function addAnnotation() {
   if (!artifact.value || !draft.title.trim()) {
     message.warning('请填写标注标题');
@@ -84,12 +116,14 @@ async function addAnnotation() {
   await annotationStore.addAnnotation({
     artifactId: artifact.value.id,
     position: { ...draft.position },
+    normal: draft.normal ? { ...draft.normal } : undefined,
     title: draft.title,
     content: draft.content,
     iconType: draft.iconType
   });
   draft.title = '';
   draft.content = '';
+  draft.normal = undefined;
   message.success('标注已保存到 IndexedDB');
 }
 </script>
@@ -146,6 +180,15 @@ async function addAnnotation() {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+}
+
+.pick-tip {
+  margin: 0;
+  padding: 8px 10px;
+  color: var(--museum-green);
+  font-size: 12px;
+  background: rgba(23, 63, 53, 0.08);
+  border-radius: 6px;
 }
 
 @media (max-width: 1080px) {

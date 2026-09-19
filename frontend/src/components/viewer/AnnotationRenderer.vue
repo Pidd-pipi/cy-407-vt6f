@@ -1,12 +1,13 @@
 <template>
-  <div class="annotation-layer">
+  <div class="annotation-layer" :class="{ picking: picking }">
     <button
       v-for="annotation in annotations"
+      v-show="pinStates[annotation.id]?.visible"
       :key="annotation.id"
       type="button"
       class="annotation-pin"
-      :class="annotation.iconType"
-      :style="pinStyle(annotation)"
+      :class="[annotation.iconType, { active: annotation.id === activeId }]"
+      :style="pinStyle(annotation.id)"
       @click="$emit('select', annotation.id)"
     >
       <span>{{ iconMap[annotation.iconType] }}</span>
@@ -18,9 +19,24 @@
 <script setup lang="ts">
 import type { Annotation } from '@/types';
 
-defineProps<{
-  annotations: Annotation[];
-}>();
+export interface PinState {
+  x: number;
+  y: number;
+  visible: boolean;
+}
+
+const props = withDefaults(
+  defineProps<{
+    annotations: Annotation[];
+    pinStates: Record<string, PinState>;
+    activeId?: string;
+    picking?: boolean;
+  }>(),
+  {
+    activeId: '',
+    picking: false
+  }
+);
 
 defineEmits<{
   select: [id: string];
@@ -33,10 +49,11 @@ const iconMap = {
   technique: '工'
 };
 
-function pinStyle(annotation: Annotation) {
+function pinStyle(id: string) {
+  const state = props.pinStates[id];
   return {
-    left: `${50 + annotation.position.x * 28}%`,
-    top: `${50 - annotation.position.y * 30}%`
+    left: `${state?.x ?? 0}px`,
+    top: `${state?.y ?? 0}px`
   };
 }
 </script>
@@ -45,6 +62,10 @@ function pinStyle(annotation: Annotation) {
 .annotation-layer {
   position: absolute;
   inset: 0;
+  pointer-events: none;
+}
+
+.annotation-layer.picking :deep(.annotation-pin) {
   pointer-events: none;
 }
 
@@ -63,6 +84,12 @@ function pinStyle(annotation: Annotation) {
   cursor: pointer;
   pointer-events: auto;
   transform: translate(-50%, -50%);
+  will-change: left, top;
+}
+
+.annotation-pin.active {
+  border-color: #bb4d3e;
+  box-shadow: 0 0 0 2px rgba(187, 77, 62, 0.28), 0 14px 28px rgba(31, 46, 41, 0.18);
 }
 
 .annotation-pin span {
